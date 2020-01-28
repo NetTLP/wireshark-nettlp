@@ -61,10 +61,10 @@ local TLPPacketFmtType = {
 tlp_f.tlp_fmttype = ProtoField.uint8("nettlp.tlp.ftmtype", "Packet Format Type", base.HEX, TLPPacketFmtType)
 
 local TLPPacketFormat = {
-	[0x0] = "3DW_WO_DATA",
-	[0x1] = "4DW_WO_DATA",
-	[0x2] = "3DW_DATA",
-	[0x3] = "4DW_DATA",
+	[0x0] = "3DW",
+	[0x1] = "4DW",
+	[0x2] = "3DW",
+	[0x3] = "4DW",
 	[0x4] = "TLP_Prefix"
 }
 tlp_f.tlp_fmt = ProtoField.uint8("nettlp.tlp.fmttype.format", "Packet Format", base.HEX, TLPPacketFormat, 0xe)
@@ -91,7 +91,13 @@ tlp_f.tlp_rsvd1 = ProtoField.uint8("nettlp.tlp.reserved2", "Reserved1", nil, nil
 
 tlp_f.tlp_digest = ProtoField.uint16("nettlp.tlp.digest", "Digest", base.HEX, nil, 0x8000)
 tlp_f.tlp_poison = ProtoField.uint16("nettlp.tlp.poison", "Poison", base.HEX, nil, 0x4000)
-tlp_f.tlp_attr = ProtoField.uint16("nettlp.tlp.attr", "Attr", base.HEX, nil, 0x3000)
+local TLPAttr = {
+	[0x0] = "",
+	[0x1] = "NOSNP",
+	[0x2] = "RELAX",
+	[0x3] = "RELAX, NOSNP",
+}
+tlp_f.tlp_attr = ProtoField.uint16("nettlp.tlp.attr", "Attr", base.HEX, TLPAttr, 0x3000)
 tlp_f.tlp_rsvd2 = ProtoField.uint16("nettlp.tlp.reserved3", "Reserved2", nil, nil, 0xc00)
 tlp_f.tlp_length = ProtoField.uint16("nettlp.tlp.length", "Length", base.HEX, nil, 0x3ff)
 
@@ -175,7 +181,7 @@ function nettlp_proto.dissector(buffer, pinfo, tree)
 
 	local tlp_subtree = subtree:add(buffer(6, buffer:len()-6), "PCIe Transaction Layer Packet")
 	-- TLP common header
-	fmttype = buffer(6,1):uint()
+	local fmttype = buffer(6,1):uint()
 
 	tlp_subtree:add(tlp_f.tlp_fmttype, buffer(6,1))
 
@@ -277,6 +283,50 @@ function nettlp_proto.dissector(buffer, pinfo, tree)
 
 	-- pinfo
 	pinfo.cols.protocol = "PCIe TLP"
+
+	local fmttype_info = TLPPacketFmtType[fmttype]
+	local fmt_info = TLPPacketFormat[buffer(6,1):bitfield(3,5)]
+	local tclass_info = buffer(7,1):bitfield(1,3)
+	local attr_info = TLPAttr[buffer(8,1):bitfield(2,2)]
+	local tlplen_info = buffer(8,2):bitfield(6,10)
+
+	local pinfo_str = string.format("%s, %s, tc %d, flags [%s], attrs [%s], len %d DW, ",
+		fmttype_info, fmt_info, tclass_info, "", attr_info, tlplen_info)
+
+	if fmttype == 0x00 or fmttype == 0x40 then  -- MRd_3DW or MWr_3DW
+		local reqid_busnum_info = buffer(10,1):uint()
+		local reqid_devnum_info = buffer(11,1):bitfield(0,4)
+		local tag_info = buffer(12,1):uint()
+		local last_info = buffer(13,1):bitfield(0,4)
+		local first_info = buffer(13,1):bitfield(4,4)
+		local addr32_info = buffer(14,4):uint()
+		pinfo_str = pinfo_str .. string.format("requester %02x:%02x, tag 0x%02x, last 0x%x, first 0x%x, Addr 0x%016x",
+			reqid_busnum_info, reqid_devnum_info, tag_info, last_info, first_info, addr32_info)
+	elseif fmttype == 0x20 or fmtype == 0x60 then  -- MRd_4DW or MWr_4DW
+		local reqid_busnum_info = buffer(10,1):uint()
+		local reqid_devnum_info = buffer(11,1):bitfield(0,4)
+		local tag_info = buffer(12,1):uint()
+		local last_info = buffer(13,1):bitfield(0,4)
+		local first_info = buffer(13,1):bitfield(4,4)
+		local addr64_info = buffer(14,8):uint()
+		pinfo_str = pinfo_str .. string.format("requester %02x:%02x, tag 0x%02x, last 0x%x, first 0x%x, Addr 0x%032x",
+			reqid_busnum_info, reqid_devnum_info, tag_info, last_info, first_info, addr64_info)
+	elseif fmttype == 0x0a or fmttype == 0x4a then  -- Cpl or CplD
+		local cplid_busnum_info = buffer(10,1):uint()
+		local cplid_devnum_info = buffer(11,1):bitfield(0,4)
+		local stat_info = TLPCompletionStatus[buffer(12,2):bitfield(0,3)]
+		local bytecnt_info = buffer(12,2):bitfield(4,12)
+		local reqid_busnum_info = buffer(14,1):uint()
+		local reqid_devnum_info = buffer(15,1):bitfield(0,4)
+		local tag_info = buffer(16,1):uint()
+		local lowaddr_info = buffer(17,1):bitfield(1,7)
+		pinfo_str = pinfo_str .. string.format("completer %02x:%02x, %s, byte count %d, requester %02x:%02x, tag 0x%02x, lowaddr 0x%02x",
+			cplid_busnum_info, cplid_devnum_info, stat_info, bytecnt_info, 
+			reqid_busnum_info, reqid_devnum_info, tag_info, lowaddr_info)
+	end
+
+	pinfo.cols.info = pinfo_str
+	-- End: pinfo
 end
 
 DissectorTable.get("udp.port"):add("12288-12544", nettlp_proto)
