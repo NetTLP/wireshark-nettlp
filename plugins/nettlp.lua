@@ -97,6 +97,13 @@ tlp_f.tlp_length = ProtoField.uint16("nettlp.tlp.length", "Length", base.HEX, ni
 
 tlp_f.tlp_payload = ProtoField.bytes("nettlp.tlp.payload", "TLP Payload")
 
+tlp_f.tlp_reqid = ProtoField.uint16("nettlp.tlp.reqid", "Requester ID", base.HEX)
+tlp_f.tlp_cplid = ProtoField.uint16("nettlp.tlp.cplid", "Completer ID", base.HEX)
+
+tlp_f.tlp_busnum = ProtoField.uint16("nettlp.tlp.busnum", "Bus Number", base.HEX)
+tlp_f.tlp_devnum = ProtoField.uint16("nettlp.tlp.devnum", "Device Number", base.HEX)
+tlp_f.tlp_funcnum = ProtoField.uint16("nettlp.tlp.funcnum", "Function Number", base.HEX)
+
 
 -- PCI Express TLP Memory Request 3DW Header (32 bit address):
 -- |       0       |       1       |       2       |       3       |
@@ -114,11 +121,6 @@ tlp_f.tlp_payload = ProtoField.bytes("nettlp.tlp.payload", "TLP Payload")
 -- +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 -- |                            Address                        | R |
 -- +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-
-tlp_f.mr_reqid = ProtoField.uint16("nettlp.tlp.mr_reqid", "Request ID", base.HEX)
--- tlp_f.mr_reqid_busnum = ProtoField.uint16("nettlp.tlp.mr_reqid.busnum", "Bus Number", base.HEX, 0xff00)
--- tlp_f.mr_reqid_devnum = ProtoField.uint16("nettlp.tlp.mr_reqid.devnum", "Device Number", base.HEX, 0xf8)
--- tlp_f.mr_reqid_funcnum = ProtoField.uint16("nettlp.tlp.mr_reqid.funcnum", "Function Number", base.HEX, 0x3)
 
 tlp_f.mr_tag = ProtoField.uint8("nettlp.tlp.mr_tag", "Tag", base.HEX)
 
@@ -143,9 +145,6 @@ tlp_f.mr_addr64_rsvd = ProtoField.uint64("nettlp.tlp.mr_addr64_rsvd", "Reserved_
 -- +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 
 tlp_f.cpl_cplid = ProtoField.uint16("nettlp.tlp.cpl_cplid", "Completer ID", base.HEX)
--- tlp_f.cpl_cplid_busnum = ProtoField.uint16("nettlp.tlp.cpl_cplid.busnum", "Bus Number", base.HEX, 0xff00)
--- tlp_f.cpl_cplid_devnum = ProtoField.uint16("nettlp.tlp.cpl_cplid.devnum", "Device Number", base.HEX, 0xf8)
--- tlp_f.cpl_cplid_funcnum = ProtoField.uint16("nettlp.tlp.cpl_cplid.funcnum", "Function Number", base.HEX, 0x3)
 
 local TLPCompletionStatus = {
 	[0x0] = "Successful Completion (SC)",
@@ -158,9 +157,6 @@ tlp_f.cpl_bcm = ProtoField.uint16("nettlp.tlp.cpl_bcm", "Byte Count Modified", n
 tlp_f.cpl_bytecnt = ProtoField.uint16("nettlp.tlp.cpl_bytecnt", "Byte Count", nil, nil, 0xfff)
 
 tlp_f.cpl_reqid = ProtoField.uint16("nettlp.tlp.cpl_reqid", "Requester ID", base.HEX)
--- tlp_f.cpl_reqid_busnum = ProtoField.uint16("nettlp.tlp.cpl_reqid.busnum", "Bus Number", base.HEX, 0xff00)
--- tlp_f.cpl_reqid_devnum = ProtoField.uint16("nettlp.tlp.cpl_reqid.devnum", "Device Number", base.HEX, 0xf8)
--- tlp_f.cpl_reqid_funcnum = ProtoField.uint16("nettlp.tlp.cpl_reqid.funcnum", "Function Number", base.HEX, 0x3)
 
 tlp_f.cpl_tag = ProtoField.uint8("nettlp.tlp.cpl_tag", "Tag", base.HEX)
 
@@ -196,21 +192,33 @@ function nettlp_proto.dissector(buffer, pinfo, tree)
 
 	-- TLP memory request packet
 	if fmttype == 0x00 then  -- MRd_3DW
-		tlp_subtree:add(tlp_f.mr_reqid,       buffer(10,2))
+		local reqid_subtree = tlp_subtree:add(tlp_f.tlp_reqid, buffer(10,2))
+			-- reqid tree
+			reqid_subtree:add(tlp_f.tlp_busnum, buffer(10,2), buffer(10,2):bitfield(0, 8))
+			reqid_subtree:add(tlp_f.tlp_devnum, buffer(10,2), buffer(10,2):bitfield(8, 4))
+			reqid_subtree:add(tlp_f.tlp_funcnum, buffer(10,2), buffer(10,2):bitfield(12, 4))
 		tlp_subtree:add(tlp_f.mr_tag,         buffer(12,1))
 		tlp_subtree:add(tlp_f.mr_lastbe,      buffer(13,1))
 		tlp_subtree:add(tlp_f.mr_firstbe,     buffer(13,1))
 		tlp_subtree:add(tlp_f.mr_addr32,      buffer(14,4))
 		tlp_subtree:add(tlp_f.mr_addr32_rsvd, buffer(14,4))
 	elseif fmttype == 0x20 then  -- MRd_4DW
-		tlp_subtree:add(tlp_f.mr_reqid,       buffer(10,2))
+		local reqid_subtree = tlp_subtree:add(tlp_f.tlp_reqid, buffer(10,2))
+			-- reqid tree
+			reqid_subtree:add(tlp_f.tlp_busnum, buffer(10,2), buffer(10,2):bitfield(0, 8))
+			reqid_subtree:add(tlp_f.tlp_devnum, buffer(10,2), buffer(10,2):bitfield(8, 4))
+			reqid_subtree:add(tlp_f.tlp_funcnum, buffer(10,2), buffer(10,2):bitfield(12, 4))
 		tlp_subtree:add(tlp_f.mr_tag,         buffer(12,1))
 		tlp_subtree:add(tlp_f.mr_lastbe,      buffer(13,1))
 		tlp_subtree:add(tlp_f.mr_firstbe,     buffer(13,1))
 		tlp_subtree:add(tlp_f.mr_addr64,      buffer(14,8))
 		tlp_subtree:add(tlp_f.mr_addr64_rsvd, buffer(14,8))
 	elseif fmttype == 0x40 then  -- MWr_3DW
-		tlp_subtree:add(tlp_f.mr_reqid,       buffer(10,2))
+		local reqid_subtree = tlp_subtree:add(tlp_f.tlp_reqid, buffer(10,2))
+			-- reqid tree
+			reqid_subtree:add(tlp_f.tlp_busnum, buffer(10,2), buffer(10,2):bitfield(0, 8))
+			reqid_subtree:add(tlp_f.tlp_devnum, buffer(10,2), buffer(10,2):bitfield(8, 4))
+			reqid_subtree:add(tlp_f.tlp_funcnum, buffer(10,2), buffer(10,2):bitfield(12, 4))
 		tlp_subtree:add(tlp_f.mr_tag,         buffer(12,1))
 		tlp_subtree:add(tlp_f.mr_lastbe,      buffer(13,1))
 		tlp_subtree:add(tlp_f.mr_firstbe,     buffer(13,1))
@@ -218,28 +226,48 @@ function nettlp_proto.dissector(buffer, pinfo, tree)
 		tlp_subtree:add(tlp_f.mr_addr32_rsvd, buffer(14,4))
 		tlp_subtree:add(tlp_f.tlp_payload,    buffer(18))
 	elseif fmttype == 0x60 then  -- MWr_4DW
-		tlp_subtree:add(tlp_f.mr_reqid,       buffer(10,2))
+		local reqid_subtree = tlp_subtree:add(tlp_f.tlp_reqid, buffer(10,2))
+			-- reqid tree
+			reqid_subtree:add(tlp_f.tlp_busnum, buffer(10,2), buffer(10,2):bitfield(0, 8))
+			reqid_subtree:add(tlp_f.tlp_devnum, buffer(10,2), buffer(10,2):bitfield(8, 4))
+			reqid_subtree:add(tlp_f.tlp_funcnum, buffer(10,2), buffer(10,2):bitfield(12, 4))
 		tlp_subtree:add(tlp_f.mr_tag,         buffer(12,1))
 		tlp_subtree:add(tlp_f.mr_lastbe,      buffer(13,1))
 		tlp_subtree:add(tlp_f.mr_firstbe,     buffer(13,1))
 		tlp_subtree:add(tlp_f.mr_addr64,      buffer(14,8))
 		tlp_subtree:add(tlp_f.mr_addr64_rsvd, buffer(14,8))
 		tlp_subtree:add(tlp_f.tlp_payload,    buffer(22))
+	-- TLP completion packet
 	elseif fmttype == 0x0a then  -- Cpl
-		tlp_subtree:add(tlp_f.cpl_cplid,   buffer(10,2))
+		local cplid_subtree = tlp_subtree:add(tlp_f.tlp_cplid, buffer(10,2))
+			-- cplid tree
+			cplid_subtree:add(tlp_f.tlp_busnum, buffer(10,2), buffer(10,2):bitfield(0, 8))
+			cplid_subtree:add(tlp_f.tlp_devnum, buffer(10,2), buffer(10,2):bitfield(8, 4))
+			cplid_subtree:add(tlp_f.tlp_funcnum, buffer(10,2), buffer(10,2):bitfield(12, 4))
 		tlp_subtree:add(tlp_f.cpl_cplstat, buffer(12,2))
 		tlp_subtree:add(tlp_f.cpl_bcm,     buffer(12,2))
 		tlp_subtree:add(tlp_f.cpl_bytecnt, buffer(12,2))
-		tlp_subtree:add(tlp_f.cpl_reqid,   buffer(14,2))
+		local reqid_subtree = tlp_subtree:add(tlp_f.tlp_reqid, buffer(14,2))
+			reqid_subtree:add(tlp_f.tlp_busnum, buffer(10,2), buffer(10,2):bitfield(0, 8))
+			reqid_subtree:add(tlp_f.tlp_devnum, buffer(10,2), buffer(10,2):bitfield(8, 4))
+			reqid_subtree:add(tlp_f.tlp_funcnum, buffer(10,2), buffer(10,2):bitfield(12, 4))
 		tlp_subtree:add(tlp_f.cpl_tag,     buffer(16,1))
 		tlp_subtree:add(tlp_f.cpl_rsvd0,   buffer(17,1))
 		tlp_subtree:add(tlp_f.cpl_lowaddr, buffer(17,1))
 	elseif fmttype == 0x4a then  -- CplD
-		tlp_subtree:add(tlp_f.cpl_cplid,   buffer(10,2))
+		local cplid_subtree = tlp_subtree:add(tlp_f.tlp_cplid, buffer(10,2))
+			-- cplid tree
+			cplid_subtree:add(tlp_f.tlp_busnum, buffer(10,2), buffer(10,2):bitfield(0, 8))
+			cplid_subtree:add(tlp_f.tlp_devnum, buffer(10,2), buffer(10,2):bitfield(8, 4))
+			cplid_subtree:add(tlp_f.tlp_funcnum, buffer(10,2), buffer(10,2):bitfield(12, 4))
 		tlp_subtree:add(tlp_f.cpl_cplstat, buffer(12,2))
 		tlp_subtree:add(tlp_f.cpl_bcm,     buffer(12,2))
 		tlp_subtree:add(tlp_f.cpl_bytecnt, buffer(12,2))
-		tlp_subtree:add(tlp_f.cpl_reqid,   buffer(14,2))
+		local reqid_subtree = tlp_subtree:add(tlp_f.tlp_reqid, buffer(14,2))
+			-- reqid tree
+			reqid_subtree:add(tlp_f.tlp_busnum, buffer(10,2), buffer(10,2):bitfield(0, 8))
+			reqid_subtree:add(tlp_f.tlp_devnum, buffer(10,2), buffer(10,2):bitfield(8, 4))
+			reqid_subtree:add(tlp_f.tlp_funcnum, buffer(10,2), buffer(10,2):bitfield(12, 4))
 		tlp_subtree:add(tlp_f.cpl_tag,     buffer(16,1))
 		tlp_subtree:add(tlp_f.cpl_rsvd0,   buffer(17,1))
 		tlp_subtree:add(tlp_f.cpl_lowaddr, buffer(17,1))
