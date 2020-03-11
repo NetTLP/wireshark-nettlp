@@ -329,4 +329,4 @@ function nettlp_proto.dissector(buffer, pinfo, tree)
 	-- End: pinfo
 end
 
-DissectorTable.get("udp.port"):add("12288-12544", nettlp_proto)
+DissectorTable.get("udp.port"):add("12288-20479", nettlp_proto)
