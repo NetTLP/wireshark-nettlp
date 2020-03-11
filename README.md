@@ -1,10 +1,10 @@
 # wireshark-nettlp
 
-### Install (for mac)
+### Install
 
 ```bash
 $ git clone https://github.com/NetTLP/wireshark-nettlp.git
-$ mkdir -p ~/.local/lib/wireshark/
-$ cd ~/.local/lib/wireshark
-$ ln -s ~/wireshark-nettlp/plugins
+$ mkdir -p ~/.local/lib/wireshark/plugins
+$ cd ~/.local/lib/wireshark/plugins
+$ ln -s ~/wireshark-nettlp/plugins/nettlp.lua
 ```
